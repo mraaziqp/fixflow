@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { MainLayout } from '@/components/layout/main-layout';
 import { Toaster } from '@/components/ui/toaster';
+import AuthGuard from '@/components/AuthGuard';
 
 export const metadata: Metadata = {
   title: 'FixFlow',
@@ -33,8 +34,10 @@ export default function RootLayout({
         />
       </head>
       <body className="font-body antialiased">
-        <MainLayout>{children}</MainLayout>
-        <Toaster />
+        <AuthGuard>
+          <MainLayout>{children}</MainLayout>
+          <Toaster />
+        </AuthGuard>
       </body>
     </html>
   );
