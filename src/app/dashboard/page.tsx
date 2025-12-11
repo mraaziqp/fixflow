@@ -3,12 +3,12 @@
 import { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, getDocs } from 'firebase/firestore';
 import { db } from '@/firebase/client';
-import type { JobWithRelations, JobStatus } from '@/lib/types';
+import type { JobStatus } from '@/lib/types';
 import { Header } from '@/components/layout/header';
 import { JobCard } from '@/components/jobs/job-card';
 import { Button } from '@/components/ui/button';
 import { Filter, Loader2 } from 'lucide-react';
-import { getJobsWithRelations } from '@/lib/data';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type Tab = 'To Do' | 'Waiting' | 'Ready' | 'Done';
 
@@ -21,10 +21,14 @@ export default function DashboardPage() {
 
   // 1. Fetch Real-time Jobs
   useEffect(() => {
+    setLoading(true);
     const q = query(collection(db, 'jobs'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const jobsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setJobs(jobsData);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching jobs:", error);
       setLoading(false);
     });
     return () => unsubscribe();
@@ -49,7 +53,7 @@ export default function DashboardPage() {
   const filteredJobs = jobs.filter(job => {
     const custName = customers[job.customerId]?.name?.toLowerCase() || '';
     const matchesSearch = custName.includes(searchTerm.toLowerCase()) || 
-                          job.id.includes(searchTerm) || 
+                          job.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           job.description?.toLowerCase().includes(searchTerm.toLowerCase());
     
     if (searchTerm && !matchesSearch) return false;
@@ -63,6 +67,7 @@ export default function DashboardPage() {
   });
 
   const getJobCountForTab = (tab: Tab) => {
+    if (loading) return <Loader2 className="w-4 h-4 animate-spin" />;
     return jobs.filter(j => {
        if (tab === 'To Do') return j.status === 'To Do';
        if (tab === 'Waiting') return j.status === 'Waiting';
@@ -71,6 +76,26 @@ export default function DashboardPage() {
        return false;
     }).length;
   }
+
+  const JobSkeleton = () => (
+    <div className="p-4 rounded-lg border bg-card shadow-sm">
+        <div className="flex justify-between items-start mb-3">
+            <div className="space-y-2">
+                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-4 w-24" />
+            </div>
+            <Skeleton className="h-4 w-12" />
+        </div>
+        <div className="flex gap-2 mb-4">
+            <Skeleton className="h-5 w-16 rounded-full" />
+            <Skeleton className="h-5 w-20 rounded-full" />
+        </div>
+        <div className="flex justify-between items-center mt-2 border-t border-border pt-3">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-10 w-28" />
+        </div>
+    </div>
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -86,7 +111,7 @@ export default function DashboardPage() {
               className="flex-1 py-2 text-sm font-bold rounded-md capitalize transition-all"
             >
               {tab}
-              <span className="ml-2 px-1.5 py-0.5 bg-background/50 rounded-full text-xs opacity-80">
+              <span className="ml-2 px-2 py-0.5 bg-background/50 rounded-full text-xs opacity-80 min-w-[28px] flex items-center justify-center">
                 {getJobCountForTab(tab)}
               </span>
             </Button>
@@ -96,37 +121,42 @@ export default function DashboardPage() {
 
       <main className="flex-1 p-4 md:p-6 overflow-y-auto">
         {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => <JobSkeleton key={i} />)}
           </div>
         ) : filteredJobs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-center">
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-center animate-in fade-in-50 duration-500">
             <Filter size={48} className="mb-4 opacity-50" />
             <h3 className="text-lg font-semibold">No Jobs Here</h3>
             <p>There are no jobs in the '{activeTab}' stage.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredJobs.map(job => (
-              <JobCard 
+            {filteredJobs.map((job, index) => (
+              <div 
                 key={job.id} 
-                job={{
-                    ...job,
-                    customer: {
-                        name: customers[job.customerId]?.name || '...',
-                        phone: customers[job.customerId]?.phone || '',
-                        id: job.customerId,
-                        email: ''
-                    },
-                    device: {
-                        model: 'Loading...',
-                        id: job.deviceId,
-                        serialNumber: '',
-                        type: 'Other'
-                    }
-                }}
-                customerPhone={customers[job.customerId]?.phone}
-              />
+                className="animate-in fade-in-0 slide-in-from-bottom-4 duration-500"
+                style={{ animationDelay: `${index * 50}ms`, animationFillMode: 'backwards' }}
+              >
+                <JobCard 
+                  job={{
+                      ...job,
+                      customer: {
+                          name: customers[job.customerId]?.name || '...',
+                          phone: customers[job.customerId]?.phone || '',
+                          id: job.customerId,
+                          email: ''
+                      },
+                      device: {
+                          model: 'Loading...', // This should be ideally part of the job data
+                          id: job.deviceId,
+                          serialNumber: '',
+                          type: 'Other'
+                      }
+                  }}
+                  customerPhone={customers[job.customerId]?.phone}
+                />
+              </div>
             ))}
           </div>
         )}
