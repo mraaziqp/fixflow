@@ -1,0 +1,26 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function to check if user is signed in
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // 1. Customers: Only signed-in users can access
+    match /customers/{customerId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // 2. Devices: Only signed-in users can access
+    match /devices/{deviceId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // 3. Jobs: Only signed-in users can access
+    match /jobs/{jobId} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}
