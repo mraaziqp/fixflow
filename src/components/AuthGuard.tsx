@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { onAuthStateChanged, signInWithPopup, signInWithEmailAndPassword, GoogleAuthProvider, type User } from 'firebase/auth';
+import { onAuthStateChanged, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, type User } from 'firebase/auth';
 import { auth } from '@/firebase/client';
 import { ShieldCheck, Loader2, Mail, Lock, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isSignUpMode, setIsSignUpMode] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -63,6 +64,39 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const handleEmailSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) {
+      setError("Please enter both email and password.");
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+
+    setIsLoggingIn(true);
+    setError('');
+
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+    } catch (err: any) {
+      console.error("Sign up failed", err);
+      if (err.code === 'auth/email-already-in-use') {
+        setError("This email is already registered. Try signing in instead.");
+      } else if (err.code === 'auth/invalid-email') {
+        setError("Invalid email address.");
+      } else if (err.code === 'auth/weak-password') {
+        setError("Password is too weak. Use at least 6 characters.");
+      } else {
+        setError("Sign up failed. Please try again.");
+      }
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">
@@ -98,7 +132,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
             )}
 
             {/* Email/Pass Form */}
-            <form onSubmit={handleEmailLogin} className="space-y-4">
+            <form onSubmit={isSignUpMode ? handleEmailSignUp : handleEmailLogin} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1 uppercase">Email</label>
                 <div className="relative">
@@ -132,9 +166,25 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
                 disabled={isLoggingIn}
                 className="w-full font-bold py-3.5 h-auto px-4 rounded-xl shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isLoggingIn ? <Loader2 className="animate-spin" size={20} /> : 'Sign In'}
+                {isLoggingIn ? <Loader2 className="animate-spin" size={20} /> : (isSignUpMode ? 'Sign Up' : 'Sign In')}
               </Button>
             </form>
+
+            {/* Toggle Sign In / Sign Up */}
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSignUpMode(!isSignUpMode);
+                  setError('');
+                  setEmail('');
+                  setPassword('');
+                }}
+                className="text-sm text-muted-foreground hover:text-primary transition-colors"
+              >
+                {isSignUpMode ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+              </button>
+            </div>
 
             {/* Divider */}
             <div className="relative my-8">

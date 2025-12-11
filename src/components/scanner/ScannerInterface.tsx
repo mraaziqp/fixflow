@@ -5,50 +5,98 @@ import { useZxing } from 'react-zxing';
 import { useRouter } from 'next/navigation';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/firebase/client';
-import { Loader2, Keyboard, Camera } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { Loader2, Keyboard, Camera, CheckCircle2 } from 'lucide-react';
 
 export default function ScannerInterface() {
   const router = useRouter();
+  const { toast } = useToast();
   const [isChecking, setIsChecking] = useState(false);
   const [manualMode, setManualMode] = useState(false);
   const [manualSerial, setManualSerial] = useState('');
+  const [scanSuccess, setScanSuccess] = useState(false);
 
   // 1. The "Check Logic" - The Brain of the Scanner
   const handleScan = async (serialValue: string) => {
     if (isChecking || !serialValue) return;
     
+    const trimmedSerial = serialValue.trim().toUpperCase();
+    if (trimmedSerial.length < 3) {
+      toast({
+        variant: 'destructive',
+        title: 'Invalid Serial',
+        description: 'Serial number is too short. Please try again.',
+      });
+      return;
+    }
+
     setIsChecking(true);
+    setScanSuccess(false);
+    
     try {
       // Query Firestore for existing device
       const devicesRef = collection(db, 'devices');
-      const q = query(devicesRef, where('serialNumber', '==', serialValue));
+      const q = query(devicesRef, where('serialNumber', '==', trimmedSerial));
       const querySnapshot = await getDocs(q);
 
+      setScanSuccess(true);
+      
       if (!querySnapshot.empty) {
         // CASE A: EXISTING DEVICE -> Go to History
         const deviceDoc = querySnapshot.docs[0];
-        router.push(`/device/${deviceDoc.id}`);
+        toast({
+          title: 'Device Found',
+          description: 'Redirecting to device history...',
+        });
+        setTimeout(() => router.push(`/device/${deviceDoc.id}`), 500);
       } else {
         // CASE B: NEW DEVICE -> Go to Intake Form
-        // We pass the serial as a query param so the form is pre-filled
-        router.push(`/jobs/new?serial=${encodeURIComponent(serialValue)}`);
+        toast({
+          title: 'New Device',
+          description: 'Redirecting to job intake form...',
+        });
+        setTimeout(() => router.push(`/jobs/new?serial=${encodeURIComponent(trimmedSerial)}`), 500);
       }
     } catch (error) {
       console.error("Database check failed", error);
-      alert("Error checking database. Please try manual entry.");
+      toast({
+        variant: 'destructive',
+        title: 'Database Error',
+        description: 'Failed to check device. Please try manual entry or check your connection.',
+      });
       setIsChecking(false);
+      setScanSuccess(false);
     }
   };
 
-  // 2. The Camera Hook
+  // 2. The Camera Hook with Improved Constraints
   const { ref } = useZxing({
     onDecodeResult: (result) => handleScan(result.getText()),
-    paused: isChecking || manualMode, // Pause camera when processing or in manual mode
+    paused: isChecking || manualMode,
+    constraints: {
+      video: {
+        facingMode: 'environment', // Forces the back camera
+        width: { min: 640, ideal: 1280, max: 1920 }, // Higher res for sharpness
+        height: { min: 480, ideal: 720, max: 1080 },
+        // Try to force autofocus if the browser supports it
+        focusMode: 'continuous', 
+      } as MediaTrackConstraints, 
+    },
+    // Add a time between scans to prevent double-scanning rapid fire
+    timeBetweenDecodingAttempts: 300, 
   });
 
   // 3. Manual Entry Handler
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!manualSerial.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Empty Serial',
+        description: 'Please enter a serial number.',
+      });
+      return;
+    }
     handleScan(manualSerial);
   };
 
@@ -84,9 +132,18 @@ export default function ScannerInterface() {
         
         {isChecking ? (
           // LOADING STATE
-          <div className="flex flex-col items-center animate-pulse">
-            <Loader2 className="w-16 h-16 text-primary animate-spin mb-4" />
-            <h2 className="text-xl font-semibold">Checking Database...</h2>
+          <div className="flex flex-col items-center">
+            {scanSuccess ? (
+              <>
+                <CheckCircle2 className="w-16 h-16 text-green-500 mb-4 animate-in zoom-in duration-300" />
+                <h2 className="text-xl font-semibold text-green-500">Success!</h2>
+              </>
+            ) : (
+              <>
+                <Loader2 className="w-16 h-16 text-primary animate-spin mb-4" />
+                <h2 className="text-xl font-semibold">Checking Database...</h2>
+              </>
+            )}
           </div>
         ) : manualMode ? (
           // MANUAL KEYPAD MODE
