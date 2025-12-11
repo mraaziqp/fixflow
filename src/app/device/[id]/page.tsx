@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { doc, getDoc, collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { db } from '@/firebase/client';
-import { User, Smartphone, History, Plus, ArrowLeft } from 'lucide-react';
+import { User, Smartphone, History, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,8 +40,8 @@ export default function DeviceProfile() {
         setDevice({ id: deviceSnap.id, ...deviceData });
 
         // 2. Fetch Customer Details
-        if (deviceData.customer_id) {
-          const customerRef = doc(db, 'customers', deviceData.customer_id);
+        if (deviceData.customerId) {
+          const customerRef = doc(db, 'customers', deviceData.customerId);
           const customerSnap = await getDoc(customerRef);
           if (customerSnap.exists()) {
             setCustomer(customerSnap.data());
@@ -52,8 +52,8 @@ export default function DeviceProfile() {
         const jobsRef = collection(db, 'jobs');
         const q = query(
           jobsRef, 
-          where('device_id', '==', id),
-          orderBy('created_at', 'desc')
+          where('deviceId', '==', id),
+          orderBy('createdAt', 'desc')
         );
         const historySnap = await getDocs(q);
         const historyData = historySnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -95,7 +95,7 @@ export default function DeviceProfile() {
                         </CardHeader>
                         <CardContent>
                             <h2 className="text-xl font-bold">{device?.model}</h2>
-                            <p className="font-code text-muted-foreground">{device?.serial_number}</p>
+                            <p className="font-code text-muted-foreground">{device?.serialNumber}</p>
                         </CardContent>
                     </Card>
                 </div>
@@ -116,15 +116,15 @@ export default function DeviceProfile() {
                                 <div key={job.id}>
                                     <div className="p-4 rounded-lg bg-secondary/50">
                                         <div className="flex justify-between items-start mb-2">
-                                            <Badge variant={job.status === 'done' ? 'default' : 'secondary'} className={job.status === 'done' ? `bg-green-500/20 text-green-300 border-green-500/30` : `bg-blue-500/20 text-blue-300 border-blue-500/30`}>
+                                            <Badge variant={job.status === 'Done' ? 'default' : 'secondary'} className={job.status === 'Done' ? `bg-green-500/20 text-green-300 border-green-500/30` : `bg-blue-500/20 text-blue-300 border-blue-500/30`}>
                                                 {job.status}
                                             </Badge>
                                             <span className="text-xs text-muted-foreground font-code">
-                                                {job.created_at?.seconds ? new Date(job.created_at.seconds * 1000).toLocaleDateString() : 'N/A'}
+                                                {job.createdAt?.seconds ? new Date(job.createdAt.seconds * 1000).toLocaleDateString() : 'N/A'}
                                             </span>
                                         </div>
                                         <p className="text-sm text-foreground line-clamp-2">
-                                            {job.ai_summary || job.notes || 'No notes recorded.'}
+                                            {job.ai_summary || job.description || 'No description recorded.'}
                                         </p>
                                         <div className="mt-2 text-xs text-muted-foreground font-code">
                                             Job #{job.id.slice(0,5)}
@@ -141,7 +141,7 @@ export default function DeviceProfile() {
 
             <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 border-t border-border backdrop-blur-sm z-20 flex justify-end">
                 <Button asChild size="lg" className="bg-accent text-accent-foreground hover:bg-accent/90">
-                    <Link href={`/jobs/new?serial=${encodeURIComponent(device?.serial_number || '')}`}>
+                    <Link href={`/jobs/new?serial=${encodeURIComponent(device?.serialNumber || '')}`}>
                         <Plus size={24} />
                         <span>New Job for this Device</span>
                     </Link>

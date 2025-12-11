@@ -1,41 +1,53 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getJobsWithRelations } from '@/lib/data';
+import { collection, query, orderBy, onSnapshot, getDocs } from 'firebase/firestore';
+import { db } from '@/firebase/client';
 import type { JobWithRelations, JobStatus } from '@/lib/types';
 import { Header } from '@/components/layout/header';
 import { JobCard } from '@/components/jobs/job-card';
 import { Button } from '@/components/ui/button';
 import { Filter, Loader2 } from 'lucide-react';
-import { customers as mockCustomers } from '@/lib/data';
+import { getJobsWithRelations } from '@/lib/data';
 
 type Tab = 'To Do' | 'Waiting' | 'Ready' | 'Done';
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<Tab>('To Do');
-  const [jobs, setJobs] = useState<JobWithRelations[]>([]);
+  const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState<Record<string, { name: string; phone: string }>>({});
   const [searchTerm, setSearchTerm] = useState('');
 
-  // 1. Fetch Real-time Jobs (mocked) and Customers
+  // 1. Fetch Real-time Jobs
   useEffect(() => {
-    const allJobs = getJobsWithRelations();
-    setJobs(allJobs);
-
-    const map: Record<string, { name: string; phone: string }> = {};
-    mockCustomers.forEach(customer => {
-        map[customer.id] = { name: customer.name, phone: customer.phone };
+    const q = query(collection(db, 'jobs'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const jobsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setJobs(jobsData);
+      setLoading(false);
     });
-    setCustomers(map);
+    return () => unsubscribe();
+  }, []);
 
-    setLoading(false);
+  // 2. Fetch Customer Names & Phones
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      const snap = await getDocs(collection(db, 'customers'));
+      const map: Record<string, { name: string, phone: string }> = {};
+      snap.docs.forEach(doc => {
+          const data = doc.data();
+          map[doc.id] = { name: data.name || 'Unknown', phone: data.phone || '' };
+      });
+      setCustomers(map);
+    };
+    fetchCustomers();
   }, []);
 
 
   // 3. Filter Logic (Search + Tabs)
   const filteredJobs = jobs.filter(job => {
-    const custName = customers[job.customer.id]?.name?.toLowerCase() || '';
+    const custName = customers[job.customerId]?.name?.toLowerCase() || '';
     const matchesSearch = custName.includes(searchTerm.toLowerCase()) || 
                           job.id.includes(searchTerm) || 
                           job.description?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -98,8 +110,22 @@ export default function DashboardPage() {
             {filteredJobs.map(job => (
               <JobCard 
                 key={job.id} 
-                job={job}
-                customerPhone={customers[job.customer.id]?.phone}
+                job={{
+                    ...job,
+                    customer: {
+                        name: customers[job.customerId]?.name || '...',
+                        phone: customers[job.customerId]?.phone || '',
+                        id: job.customerId,
+                        email: ''
+                    },
+                    device: {
+                        model: 'Loading...',
+                        id: job.deviceId,
+                        serialNumber: '',
+                        type: 'Other'
+                    }
+                }}
+                customerPhone={customers[job.customerId]?.phone}
               />
             ))}
           </div>

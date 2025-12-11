@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useZxing } from 'react-zxing';
 import { useRouter } from 'next/navigation';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '@/firebase/client'; // Ensure this points to your firebase config
+import { db } from '@/firebase/client';
 import { Loader2, Keyboard, Camera } from 'lucide-react';
 
 export default function ScannerInterface() {
@@ -21,7 +21,7 @@ export default function ScannerInterface() {
     try {
       // Query Firestore for existing device
       const devicesRef = collection(db, 'devices');
-      const q = query(devicesRef, where('serial_number', '==', serialValue));
+      const q = query(devicesRef, where('serialNumber', '==', serialValue));
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {

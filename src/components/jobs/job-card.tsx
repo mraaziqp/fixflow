@@ -90,7 +90,7 @@ Total: $${job.cost.toFixed(2)}.`;
       <div className="flex justify-between items-center mt-2 border-t border-border pt-3 gap-2">
         <div className="flex items-center text-xs text-muted-foreground gap-1 min-w-[80px]">
           <Clock size={12} />
-          <span>{format(new Date(job.createdAt), "dd/MM/yy")}</span>
+          <span>{job.createdAt ? format(new Date(job.createdAt), "dd/MM/yy") : 'N/A'}</span>
         </div>
 
         <div className="flex items-center gap-2 w-full justify-end">

@@ -30,7 +30,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { JobUrgency } from '@/lib/types';
-import { customers } from '@/lib/data'; // Mock customer data
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '@/firebase/client';
 
 const formSchema = z.object({
   customerName: z.string().min(1, 'Customer name is required'),
@@ -69,22 +70,26 @@ export function NewJobForm({ searchParams }: { searchParams: { [key: string]: st
   const phoneValue = form.watch('customerPhone');
 
   useEffect(() => {
-    const checkCustomer = () => {
-      if (phoneValue && phoneValue.length >= 10) {
-        const existingCustomer = customers.find(c => c.phone.replace(/\D/g, '') === phoneValue.replace(/\D/g, ''));
-        if (existingCustomer) {
+    const checkCustomer = async () => {
+      const cleanedPhone = phoneValue.replace(/\D/g, '');
+      if (cleanedPhone.length >= 10) {
+        const q = query(collection(db, 'customers'), where('phone', '==', cleanedPhone));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const existingCustomer = snap.docs[0].data();
           form.setValue('customerName', existingCustomer.name);
-          form.setValue('customerEmail', existingCustomer.email);
+          form.setValue('customerEmail', existingCustomer.email || '');
           setIsExistingCustomer(true);
           toast({ title: 'Returning Customer Found', description: `Details for ${existingCustomer.name} have been pre-filled.`});
         } else {
-          form.setValue('customerName', '');
+          // Keep typed name if no customer is found
+          // form.setValue('customerName', '');
           form.setValue('customerEmail', '');
           setIsExistingCustomer(false);
         }
       }
     };
-    const timeout = setTimeout(checkCustomer, 300);
+    const timeout = setTimeout(checkCustomer, 500);
     return () => clearTimeout(timeout);
   }, [phoneValue, form, toast]);
 
@@ -125,11 +130,14 @@ export function NewJobForm({ searchParams }: { searchParams: { [key: string]: st
   const onSubmit = (data: NewJobFormValues) => {
     startTransition(async () => {
       const formData = new FormData();
+      // Sanitize phone number before creating FormData
+      data.customerPhone = data.customerPhone.replace(/\D/g, '');
+      
       Object.entries(data).forEach(([key, value]) => {
         if (Array.isArray(value)) {
           value.forEach(v => formData.append(key, v));
-        } else if (value) {
-          formData.append(key, value);
+        } else if (value !== null && value !== undefined) {
+          formData.append(key, String(value));
         }
       });
 
@@ -137,10 +145,8 @@ export function NewJobForm({ searchParams }: { searchParams: { [key: string]: st
         const res = await createNewJob(formData);
         if (res?.errors) {
           toast({ variant: 'destructive', title: 'Error Creating Job', description: 'Please check the form for errors and try again.' });
-        } else {
-          toast({ title: 'Success', description: 'New job has been created successfully.' });
-          router.push('/dashboard');
         }
+        // Redirect is handled in the server action
       } catch (e) {
         toast({ variant: 'destructive', title: 'Submission Error', description: 'An unexpected error occurred. Please try again.' });
       }
