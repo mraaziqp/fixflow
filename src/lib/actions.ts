@@ -67,6 +67,8 @@ export async function updateJobStatus(jobId: string, newStatus: JobStatus) {
     if (!job) {
         throw new Error('Job not found');
     }
+    
+    const previousStatus = job.status;
 
     job.status = newStatus;
     job.updatedAt = new Date().toISOString();
@@ -75,10 +77,10 @@ export async function updateJobStatus(jobId: string, newStatus: JobStatus) {
         shouldNotify: false
     };
 
-    if (newStatus === 'Ready' || newStatus === 'Done') {
+    if (newStatus !== previousStatus) {
         const result = await intelligentJobStatusNotification({
             jobStatus: newStatus,
-            jobDetails: job.description,
+            previousJobStatus: previousStatus,
             customerName: job.customer.name,
             device: job.device.model,
             cost: job.cost,
@@ -92,6 +94,7 @@ export async function updateJobStatus(jobId: string, newStatus: JobStatus) {
             notificationData.whatsAppUrl = whatsAppUrl;
         }
     }
+
 
     revalidatePath('/dashboard');
     revalidatePath(`/jobs/${jobId}`);

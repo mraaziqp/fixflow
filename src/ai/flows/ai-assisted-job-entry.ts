@@ -17,8 +17,9 @@ const AIAssistedJobEntryInputSchema = z.object({
 export type AIAssistedJobEntryInput = z.infer<typeof AIAssistedJobEntryInputSchema>;
 
 const AIAssistedJobEntryOutputSchema = z.object({
-  tags: z.array(z.string()).describe('An array of relevant tags for the job, suggested by the AI.'),
-  urgency: z.enum(['low', 'medium', 'high']).describe('The urgency level for the job, suggested by the AI.'),
+  tags: z.array(z.string()).describe("An array of 1-3 technical issue tags (e.g., 'HDMI', 'Power Supply', 'Disc Drive')."),
+  urgency: z.enum(['low', 'medium', 'high']).describe("The urgency level for the job, suggested by the AI based on keywords (e.g., 'urgent', 'ASAP' = High)."),
+  summary: z.string().describe('A 5-word summary of the issue for a title.'),
 });
 
 export type AIAssistedJobEntryOutput = z.infer<typeof AIAssistedJobEntryOutputSchema>;
@@ -31,12 +32,12 @@ const aiAssistedJobEntryPrompt = ai.definePrompt({
   name: 'aiAssistedJobEntryPrompt',
   input: {schema: AIAssistedJobEntryInputSchema},
   output: {schema: AIAssistedJobEntryOutputSchema},
-  prompt: `You are an AI assistant helping technicians to quickly create job entries by suggesting relevant tags and urgency levels based on their descriptions of the issue.
-
-  Based on the following issue description: {{{issueDescription}}}
-  Suggest relevant tags and an urgency level for the job.  The urgency should be 'low', 'medium', or 'high'.
-  The tags should be short and relevant to the issue.  Return a JSON object with the tags and urgency.
-  `,
+  prompt: `You are a console repair expert. Analyze this technician's raw note: "{{{issueDescription}}}".
+      
+      Tasks:
+      1. Extract 1-3 technical issue tags (e.g., 'HDMI', 'Power Supply', 'Disc Drive').
+      2. Determine urgency based on keywords (e.g., 'urgent', 'ASAP' = High).
+      3. Summarize the issue in 5 words for a title.`,
 });
 
 const aiAssistedJobEntryFlow = ai.defineFlow(
