@@ -11,7 +11,7 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const AIAssistedJobEntryInputSchema = z.object({
-  issueDescription: z.string().describe('A description of the issue with the device, provided by the technician.'),
+  issueDescription: z.string().describe("A description of the issue with the device, provided by the technician."),
 });
 
 export type AIAssistedJobEntryInput = z.infer<typeof AIAssistedJobEntryInputSchema>;
@@ -51,3 +51,5 @@ const aiAssistedJobEntryFlow = ai.defineFlow(
     return output!;
   }
 );
+
+    

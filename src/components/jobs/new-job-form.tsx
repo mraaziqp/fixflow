@@ -1,14 +1,17 @@
 'use client';
 
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useState, useEffect, useTransition } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { getAIAssistance, createNewJob } from '@/lib/actions';
+import { useToast } from '@/hooks/use-toast';
+import { Wand2, Save, User, Smartphone, Loader2 } from 'lucide-react';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import {
   Form,
   FormControl,
-  FormDescription,
-  FormField,
   FormItem,
   FormLabel,
   FormMessage,
@@ -16,25 +19,28 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getAIAssistance } from '@/lib/actions';
-import { useToast } from '@/hooks/use-toast';
-import { Wand2, Loader2, X, Tag } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { JobUrgency } from '@/lib/types';
-import { createNewJob } from '@/lib/actions';
-import { useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+// NOTE: This component is currently using mock data.
+// To connect to a real database, you will need to replace the mock action calls
+// in '@/lib/actions.ts' with your own database logic.
 
 const formSchema = z.object({
   customerName: z.string().min(1, 'Customer name is required'),
   customerPhone: z.string().min(1, 'Customer phone is required'),
-  customerEmail: z.string().email('Invalid email address'),
+  customerEmail: z.string().email('Invalid email address').optional().or(z.literal('')),
   deviceSerial: z.string().min(1, 'Device serial is required'),
   deviceModel: z.string().min(1, 'Device model is required'),
   issueDescription: z.string().min(10, 'Please provide a detailed description'),
-  tags: z.array(z.string()).min(1, 'At least one tag is required'),
-  urgency: z.enum(['low', 'medium', 'high'], { required_error: 'Urgency is required' }),
+  tags: z.array(z.string()),
+  urgency: z.enum(['low', 'medium', 'high']),
 });
 
 type NewJobFormValues = z.infer<typeof formSchema>;
@@ -59,13 +65,16 @@ export function NewJobForm({ searchParams }: { searchParams: { [key: string]: st
     },
   });
 
-  const { fields: tags, append: appendTag, remove: removeTag } = useFieldArray({
-    control: form.control,
-    name: 'tags',
-  });
-
   const handleGetAIAssistance = () => {
     const description = form.getValues('issueDescription');
+    if (!description || description.length < 10) {
+      toast({
+        variant: 'destructive',
+        title: 'Description too short',
+        description: 'Please provide a more detailed description for the AI to analyze.',
+      });
+      return;
+    }
     startAiTransition(async () => {
       const result = await getAIAssistance(description);
       if (result.error) {
@@ -80,107 +89,91 @@ export function NewJobForm({ searchParams }: { searchParams: { [key: string]: st
           description: 'Tags and urgency have been updated.',
         });
         form.setValue('urgency', result.data.urgency);
-        // Clear existing tags and add new ones
         form.setValue('tags', result.data.tags);
+        if (result.data.summary) {
+            // You can decide where to put the summary, for now we can prepend it to the description
+            const currentDescription = form.getValues('issueDescription');
+            form.setValue('issueDescription', `${result.data.summary}. \n${currentDescription}`);
+        }
       }
     });
   };
 
   const onSubmit = (data: NewJobFormValues) => {
-    startTransition(() => {
-        const formData = new FormData();
-        Object.entries(data).forEach(([key, value]) => {
-            if (Array.isArray(value)) {
-                value.forEach(v => formData.append(key, v));
-            } else {
-                formData.append(key, value);
-            }
-        });
+    startTransition(async () => {
+      const formData = new FormData();
+      Object.entries(data).forEach(([key, value]) => {
+        if (Array.isArray(value)) {
+          value.forEach(v => formData.append(key, v));
+        } else if (value) {
+          formData.append(key, value);
+        }
+      });
 
-        createNewJob(formData)
-        .then((res) => {
-          if (res?.errors) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Please check the form for errors.' });
-          } else {
-            toast({ title: 'Success', description: 'New job created successfully.' });
-            router.push('/dashboard');
-          }
-        })
-        .catch(() => {
-          toast({ variant: 'destructive', title: 'Error', description: 'Something went wrong.' });
-        });
+      try {
+        const res = await createNewJob(formData);
+        if (res?.errors) {
+          toast({ variant: 'destructive', title: 'Error Creating Job', description: 'Please check the form for errors and try again.' });
+        } else {
+          toast({ title: 'Success', description: 'New job has been created successfully.' });
+          router.push('/dashboard');
+        }
+      } catch (e) {
+        toast({ variant: 'destructive', title: 'Submission Error', description: 'An unexpected error occurred. Please try again.' });
+      }
     });
   };
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-        <div className="grid lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-8">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 max-w-4xl mx-auto pb-20">
+        <div className="grid lg:grid-cols-5 gap-8">
+          {/* Left Column */}
+          <div className="lg:col-span-3 space-y-8">
             <Card>
               <CardHeader>
-                <CardTitle>Job Details</CardTitle>
+                <CardTitle className="flex items-center justify-between">
+                    <span>Job Details</span>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleGetAIAssistance}
+                        disabled={isAiPending}
+                        >
+                        {isAiPending ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                            <Wand2 className="mr-2 h-4 w-4 text-primary" />
+                        )}
+                        AI Triage
+                    </Button>
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="relative">
-                  <FormField
-                    control={form.control}
-                    name="issueDescription"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Issue Description</FormLabel>
-                        <FormControl>
-                          <Textarea placeholder="e.g., The phone screen is cracked and doesn't respond to touch..." {...field} rows={5} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="absolute bottom-2 right-2"
-                    onClick={handleGetAIAssistance}
-                    disabled={isAiPending}
-                  >
-                    {isAiPending ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Wand2 className="mr-2 h-4 w-4 text-primary" />
-                    )}
-                    AI Assist
-                  </Button>
-                </div>
-                 <FormField
-                    control={form.control}
-                    name="tags"
-                    render={() => (
-                      <FormItem>
-                        <FormLabel>Tags</FormLabel>
-                         <FormControl>
-                            <div className="p-2 border rounded-md min-h-[40px] flex flex-wrap gap-2 items-center">
-                                {tags.map((tag, index) => (
-                                    <Badge key={tag.id} variant="secondary" className="flex items-center gap-1">
-                                        {form.getValues(`tags.${index}`)}
-                                        <button type="button" onClick={() => removeTag(index)} className="rounded-full hover:bg-muted-foreground/20">
-                                            <X className="h-3 w-3" />
-                                        </button>
-                                    </Badge>
-                                ))}
-                                {tags.length === 0 && <span className="text-sm text-muted-foreground italic px-2">Use AI Assist or add tags manually.</span>}
-                            </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <FormField
+                  control={form.control}
+                  name="issueDescription"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Issue Description</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="e.g., Fan is loud and it won't read discs. Customer says it started after a power surge..."
+                          {...field}
+                          rows={6}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>Device Information</CardTitle>
+                <CardTitle className="flex items-center gap-2"><Smartphone size={20} className="text-primary" /> Device Information</CardTitle>
               </CardHeader>
               <CardContent className="grid sm:grid-cols-2 gap-4">
                 <FormField
@@ -190,7 +183,7 @@ export function NewJobForm({ searchParams }: { searchParams: { [key: string]: st
                     <FormItem>
                       <FormLabel>Serial Number</FormLabel>
                       <FormControl>
-                        <Input placeholder="SN12345678" {...field} className="font-code"/>
+                        <Input placeholder="SN12345678" {...field} className="font-code" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -203,7 +196,7 @@ export function NewJobForm({ searchParams }: { searchParams: { [key: string]: st
                     <FormItem>
                       <FormLabel>Model</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., iPhone 14 Pro" {...field} />
+                        <Input placeholder="e.g., PlayStation 5" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -213,53 +206,61 @@ export function NewJobForm({ searchParams }: { searchParams: { [key: string]: st
             </Card>
           </div>
 
-          <div className="space-y-8">
+          {/* Right Column */}
+          <div className="lg:col-span-2 space-y-8">
+             <Card>
+                <CardHeader><CardTitle>Triage Results</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                     <FormField
+                        control={form.control}
+                        name="urgency"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>Urgency</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select urgency level" />
+                                </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                {(['low', 'medium', 'high'] as JobUrgency[]).map(level => (
+                                    <SelectItem key={level} value={level}>{level.charAt(0).toUpperCase() + level.slice(1)}</SelectItem>
+                                ))}
+                                </SelectContent>
+                            </Select>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                    <Controller
+                        control={form.control}
+                        name="tags"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Tags</FormLabel>
+                            <FormControl>
+                                <div className="p-2 border rounded-md min-h-[40px] flex flex-wrap gap-2 items-center">
+                                    {field.value.map((tag, index) => (
+                                        <Badge key={`${tag}-${index}`} variant="secondary">
+                                            {tag}
+                                        </Badge>
+                                    ))}
+                                    {field.value.length === 0 && <span className="text-sm text-muted-foreground italic px-2">Use AI Triage to generate tags.</span>}
+                                </div>
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                </CardContent>
+             </Card>
+
             <Card>
               <CardHeader>
-                <CardTitle>Urgency</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <FormField
-                  control={form.control}
-                  name="urgency"
-                  render={({ field }) => (
-                    <FormItem>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select urgency level" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {(['low', 'medium', 'high'] as JobUrgency[]).map(level => (
-                             <SelectItem key={level} value={level}>{level.charAt(0).toUpperCase() + level.slice(1)}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Customer Information</CardTitle>
+                <CardTitle className="flex items-center gap-2"><User size={20} className="text-primary"/> Customer Information</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="customerName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Full Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="John Doe" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
                 <FormField
                   control={form.control}
                   name="customerPhone"
@@ -268,6 +269,20 @@ export function NewJobForm({ searchParams }: { searchParams: { [key: string]: st
                       <FormLabel>Phone Number</FormLabel>
                       <FormControl>
                         <Input placeholder="123-456-7890" {...field} />
+                      </FormControl>
+                      <FormDescription>We'll check for existing customers.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                 <FormField
+                  control={form.control}
+                  name="customerName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Full Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="John Doe" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -290,9 +305,10 @@ export function NewJobForm({ searchParams }: { searchParams: { [key: string]: st
             </Card>
           </div>
         </div>
-        <div className="flex justify-end">
+
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 border-t border-border backdrop-blur-sm z-20 flex justify-end">
           <Button type="submit" size="lg" className="bg-accent text-accent-foreground hover:bg-accent/90" disabled={isPending}>
-             {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             Create Job
           </Button>
         </div>
@@ -300,3 +316,5 @@ export function NewJobForm({ searchParams }: { searchParams: { [key: string]: st
     </Form>
   );
 }
+
+    
