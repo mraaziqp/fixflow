@@ -24,8 +24,8 @@ export type Job = {
   urgency: JobUrgency;
   tags: string[];
   cost: number;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: string; // ISO 8601 date string
+  updatedAt: string; // ISO 8601 date string
 };
 
 export type JobWithRelations = Job & {

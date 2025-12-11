@@ -12,6 +12,8 @@ import { Button } from '@/components/ui/button';
 import {
   Form,
   FormControl,
+  FormDescription,
+  FormField,
   FormItem,
   FormLabel,
   FormMessage,
@@ -28,9 +30,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { JobUrgency } from '@/lib/types';
-// NOTE: This component is currently using mock data.
-// To connect to a real database, you will need to replace the mock action calls
-// in '@/lib/actions.ts' with your own database logic.
+import { customers } from '@/lib/data'; // Mock customer data
 
 const formSchema = z.object({
   customerName: z.string().min(1, 'Customer name is required'),
@@ -49,6 +49,7 @@ export function NewJobForm({ searchParams }: { searchParams: { [key: string]: st
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [isAiPending, startAiTransition] = useTransition();
+  const [isExistingCustomer, setIsExistingCustomer] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<NewJobFormValues>({
@@ -64,6 +65,29 @@ export function NewJobForm({ searchParams }: { searchParams: { [key: string]: st
       urgency: 'medium',
     },
   });
+
+  const phoneValue = form.watch('customerPhone');
+
+  useEffect(() => {
+    const checkCustomer = () => {
+      if (phoneValue && phoneValue.length >= 10) {
+        const existingCustomer = customers.find(c => c.phone.replace(/\D/g, '') === phoneValue.replace(/\D/g, ''));
+        if (existingCustomer) {
+          form.setValue('customerName', existingCustomer.name);
+          form.setValue('customerEmail', existingCustomer.email);
+          setIsExistingCustomer(true);
+          toast({ title: 'Returning Customer Found', description: `Details for ${existingCustomer.name} have been pre-filled.`});
+        } else {
+          form.setValue('customerName', '');
+          form.setValue('customerEmail', '');
+          setIsExistingCustomer(false);
+        }
+      }
+    };
+    const timeout = setTimeout(checkCustomer, 300);
+    return () => clearTimeout(timeout);
+  }, [phoneValue, form, toast]);
+
 
   const handleGetAIAssistance = () => {
     const description = form.getValues('issueDescription');
@@ -91,7 +115,6 @@ export function NewJobForm({ searchParams }: { searchParams: { [key: string]: st
         form.setValue('urgency', result.data.urgency);
         form.setValue('tags', result.data.tags);
         if (result.data.summary) {
-            // You can decide where to put the summary, for now we can prepend it to the description
             const currentDescription = form.getValues('issueDescription');
             form.setValue('issueDescription', `${result.data.summary}. \n${currentDescription}`);
         }
@@ -217,7 +240,7 @@ export function NewJobForm({ searchParams }: { searchParams: { [key: string]: st
                         render={({ field }) => (
                             <FormItem>
                             <FormLabel>Urgency</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select onValueChange={field.onChange} value={field.value}>
                                 <FormControl>
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select urgency level" />
@@ -270,7 +293,9 @@ export function NewJobForm({ searchParams }: { searchParams: { [key: string]: st
                       <FormControl>
                         <Input placeholder="123-456-7890" {...field} />
                       </FormControl>
-                      <FormDescription>We'll check for existing customers.</FormDescription>
+                      <FormDescription>
+                        {isExistingCustomer ? '✓ Returning customer details auto-filled.' : 'We\'ll check for existing customers.'}
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -282,7 +307,7 @@ export function NewJobForm({ searchParams }: { searchParams: { [key: string]: st
                     <FormItem>
                       <FormLabel>Full Name</FormLabel>
                       <FormControl>
-                        <Input placeholder="John Doe" {...field} />
+                        <Input placeholder="John Doe" {...field} readOnly={isExistingCustomer} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -295,7 +320,7 @@ export function NewJobForm({ searchParams }: { searchParams: { [key: string]: st
                     <FormItem>
                       <FormLabel>Email</FormLabel>
                       <FormControl>
-                        <Input placeholder="john.doe@example.com" {...field} />
+                        <Input placeholder="john.doe@example.com" {...field} readOnly={isExistingCustomer} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -316,5 +341,3 @@ export function NewJobForm({ searchParams }: { searchParams: { [key: string]: st
     </Form>
   );
 }
-
-    
