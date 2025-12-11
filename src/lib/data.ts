@@ -1,4 +1,5 @@
 import type { Customer, Device, Job, JobWithRelations } from './types';
+import { where } from 'firebase/firestore';
 
 export const customers: Customer[] = [
   { id: 'cus_1', name: 'John Doe', phone: '123-456-7890', email: 'john.doe@example.com' },
