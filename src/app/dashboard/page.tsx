@@ -7,6 +7,7 @@ import { Header } from '@/components/layout/header';
 import { JobCard } from '@/components/jobs/job-card';
 import { Button } from '@/components/ui/button';
 import { Filter, Loader2 } from 'lucide-react';
+import { customers as mockCustomers } from '@/lib/data';
 
 type Tab = 'To Do' | 'Waiting' | 'Ready' | 'Done';
 
@@ -14,16 +15,33 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<Tab>('To Do');
   const [jobs, setJobs] = useState<JobWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // For now, we are using mock data. In a real-time app, you'd use a hook here.
+  const [customers, setCustomers] = useState<Record<string, { name: string; phone: string }>>({});
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // 1. Fetch Real-time Jobs (mocked) and Customers
   useEffect(() => {
     const allJobs = getJobsWithRelations();
     setJobs(allJobs);
+
+    const map: Record<string, { name: string; phone: string }> = {};
+    mockCustomers.forEach(customer => {
+        map[customer.id] = { name: customer.name, phone: customer.phone };
+    });
+    setCustomers(map);
+
     setLoading(false);
   }, []);
 
 
+  // 3. Filter Logic (Search + Tabs)
   const filteredJobs = jobs.filter(job => {
+    const custName = customers[job.customer.id]?.name?.toLowerCase() || '';
+    const matchesSearch = custName.includes(searchTerm.toLowerCase()) || 
+                          job.id.includes(searchTerm) || 
+                          job.description?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    if (searchTerm && !matchesSearch) return false;
+
     // Tab Logic
     if (activeTab === 'To Do') return job.status === 'To Do';
     if (activeTab === 'Waiting') return job.status === 'Waiting';
@@ -80,7 +98,8 @@ export default function DashboardPage() {
             {filteredJobs.map(job => (
               <JobCard 
                 key={job.id} 
-                job={job} 
+                job={job}
+                customerPhone={customers[job.customer.id]?.phone}
               />
             ))}
           </div>
